@@ -1,0 +1,68 @@
+
+
+The Command Header
+==================
+
+A command header is always 7 bytes and has the following format:
+
+               |7|6|5|4|3|2|1|0|
+         ------|---------------|
+          CH0  |0|0|  Su |0|0|1|
+          CH1  |      Sl       |
+          CH2  |R|0|0|    A    |
+          CH3  |       P       |
+          CH4  |       K       |
+          CH5  |      C0       |
+          CH6  |      C1       |
+
+The fields have the following definitions:
+
+    S = Su << 8 | Sl = payloadSize (0-2047 bytes, exclusive of error detection bytes)
+    A = address (0-31)
+    R = responseExpected: 1 - response expected/required,
+                          0 - responses forbidden (must be set if address = 0)
+    P = port
+    K = token, a byte that the device must send with the response to this command
+    C0, C1 = check bytes that cause the running Fletcher 16 checksum to evaluate to zero if initialized to zero before CH0.
+
+The other bits are reserved. A v2 device must silently ignore any command that does not have
+the reserved bits as shown.
+
+
+The Response Header
+===================
+
+A response header is always 5 bytes and has the following format:
+
+                |7|6|5|4|3|2|1|0|
+          ------|---------------|
+           RH0  |E|0|  Su |0|1|0|
+           RH1  |      Sl       |
+           RH2  |       K       |
+           RH3  |      Fu       |
+           RH4  |      Fl       |
+
+The fields have the following definitions:
+
+    S = Su << 8 | Sl = payload size (0-2047 bytes, exclusive of error detection bytes)
+    E = errorFlag: 0 - normal response, 1 - crow-level error response
+    K = token, the same value that was sent with the command
+    Fu, Fl - The Fletcher 16 checksum after being initialized to zero and processing bytes RH0-RH2. Fu is the upper sum, and Fl is the lower sum.
+
+The other bits are reserved and must have the values shown.
+
+
+
+Changes from V1
+===============
+
+- The bits within CH0 and RH0 have been rearranged.
+- The bytes in the command header have been rearranged.
+- 'Protocol numbers' are now 'ports'.
+- The number of ports has been reduced (two-byte to one-byte values).
+- The implicit port option has been removed.
+- The user/admin command distinction has been removed.
+- The 'mute' field has been changed to 'responseExpected' with the values
+  inverted.
+- Intermediate responses have been removed.
+

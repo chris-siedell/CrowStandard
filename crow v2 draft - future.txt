@@ -1,0 +1,59 @@
+
+
+
+
+Idea: 4095 byte payloads
+------------------------
+The reserved bit is there. Necessary? What are downsides?
+
+
+Idea: numbered intermediate responses
+-------------------------------------
+Ensures data integrity when multiple responses used.
+Perhaps optional (an indefinite vs definite option).
+Would break current packet format.
+Rebuttal: intermediate responses should be used just to keep transaction open, not
+ primarily to stream data.
+
+
+Idea: intermediate command packets
+----------------------------------
+Would allow streaming to device.
+Too much burden on low-resource devices?
+If numbered, would break packet format.
+
+
+Idea: CRC option
+----------------
+CRC would be optional for devices, only Fletcher16 would be required.
+What would header format be? (A v1-2 header wrapped with an additional CRC?)
+
+
+Idea: alarm flag
+----------------
+to compensate for lack of device->host initiated comms
+each port has 7-bit alarm level (0 = clear, 1-127 = set)
+user or admin code on device can set or clear the alarm level at any time
+a set alarm would cause an alarm flag in responses to be raise, regardless of what the response is to
+host can then use admin command to queury what alarms are set (3 bytes per alarm: 2 for port, 7 bits for level, 1 bit for port type)
+host can clear alarms individually or en masse
+
+Idea: alarm byte
+----------------
+If using two lines, only one device, and a full duplex host then sending an
+alarm byte will never be a problem. Otherwise, sending a single byte when
+there's no open transaction may or may not be a problem. If the host can detect when
+mangling has taken place and then terminate and resend, this could be a
+recoverable error. The purpose of the alarm byte would be to tell the host
+that there is an alarm condition. Possible format
+                |7|6|5|4|3|2|1|0|
+          ------|---------------|
+          Alarm |1|1|x|  addr   |
+Bit 7 is the same as a normal device response, bit 6 is different
+(distinguishing it from a normal device response. Bits 0-4 give the
+address of the device raising the alarm. Bit x could make this multipurpose:
+x=1 this is an alarm notice and the host should queury to get the alarm flag,
+and x=0 signifies that the host is going offline.
+
+
+

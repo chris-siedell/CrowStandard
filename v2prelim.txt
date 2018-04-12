@@ -1,0 +1,263 @@
+
+Changes in Crow v2
+===
+
+- Introduced error responses.
+- Introduced Admin Protocol 1.
+- Changed terminology: protocol numbers are now ports. Instead of
+  describing a
+  protocol number as supported or not supported the specification now refers
+to a port being open or closed. This does not change anything at the technical
+level. 
+- Terminology: "payload length" is now "payload size".
+- Clarified ambiguous aspects of v1.
+
+
+- New: host must guarantee soem pre command idle period.
+
+INCOMPATIBILITIES
+
+bit 5 of CH3 is still reserved and should be zero, but now devices 
+
+
+
+
+Clarifications of Crow v1:
+===
+
+- Device implementations may open or close ports at any time. (Or, in v1
+terminology, the device may support or not support a protocol number at any
+time.)
+- So, given the above, the getDeviceInfo admin command (if implemented) reports the
+open ports at that instant, but there is no guarantee those ports will be open
+when a command is issued.
+
+what if number of ports exceeds 255 (getDeviceInfo limit)
+
+Crow Level Error Responses
+===
+
+In Crow v1 there are no Crow-level error responses -- device implementations
+are required to silently discard commands when any Crow-level errors occur. Crow v2
+introduces four reportable error conditions: (1) the command's payload size
+exceeds the device's capacity, (2) the admin port is not open, (3) the user
+port is not open, (4) any
+implementation specific error that can not be reported any other way. When such errors
+occur the implementation may send an error response to the host. The command
+must still be discarded.
+
+Support for any or all error responses is optional for device
+implementations. However, before sending an error response, the device implementation must:
+
+- Verify that the entire packet is otherwise completely valid and addressed to
+  the specific device (non-broadcast). For
+  excessive payload size errors, this means the implementation must have a way of
+verifying the payload checksums even if it can't store the payload.
+- Respect the mute flag.
+- Check and report excessive payload size errors before port not open errors.
+
+Crow v2 compliant host implementations must support all error response types.
+
+To signify a crow level error response bit 5 of RH0 is set to 1. There is just
+one final response per error. The first 
+byte of the payload data is a code indicating the error type:
+
+0 - excessive command payload - may be followed by 0 or 2 more bytes, if 2,
+these are the supported maximum command payload size, MSB first
+1 - admin port not open - may be followed by 0 or 2 more bytes, if 2, these
+are the attempted port
+2 - user port not open - ditto
+2 - implementation error - optional payload data consisting of ascii error string
+
+
+
+Error Response Format
+--------------------
+
+Only final responses used. This will be true in future. Allows using
+intermediate responses to dump implementation specific data.
+
+Mandatory four or six bytes:
+
+         |7|6|5|4|3|2|1|0|
+    -----|---------------|
+     E0  |I|S|0|  num    |
+     E1  |  implCrowVer  |
+     E2  |   implID_u    |
+     E3  |   implID_l    |
+    (E4) | implOffset_u  |
+    (E5) | implOffset_l  |
+
+num - 5-bit error type identifier. Meanings assigned by specification (see
+below). Unassigned codes reserved for future specifications.
+
+Bit 5 of E0 is reserved. Version 2 devices must set it to zero, and v2 hosts
+must ignore it.
+
+S - includes extra parameters defined by the Crow standard. The size and format
+of this extra data varies by code. If included, this data starts at the seventh byte.
+
+I - includes additional implementation specific information and parameters. This
+information starts at byte implOffset (offset from start of payload). The size
+and format of this data is describe below.
+
+implCrowVer is the version of the Crow standard the device conforms to. For
+devices sending error responses it should always be at least 2.
+
+implID is the two-byte identifier that should be unique to each
+implementation.
+
+implOffset is the byte offset from the start of the payload to the
+implementation specific data section. These bytes are optional only if S and I
+are both zero (there are no extra parameters of any kind included). If I=0 but
+S=1 then the bytes must be included since standard parameters start at byte
+seven. If I=0 and the device includes these bytes then their values are
+undefined (device may send any two bytes) and the host must ignore the values.
+
+
+
+Standard Error Details
+-------------------------
+
+Error responses may have additional error details besides the error number.
+There are two kinds of error details: standard and implementation.
+
+Both kinds of error details are optional for devices. Hosts should support
+them as much as possible.
+
+Standard error details are defined by the Crow standard. The location, size,
+and format of this data is described below.
+
+Implementation error details allow for richer error responses. todo
+
+
+
+Standard parameters are optional -- device implementations are not required to
+send them. However, if sent they must have exactly the size and format
+specified.
+
+Standard parameters start at the seventh byte. Any bytes between the end of
+standard parameters and the start of implementation parameters must be ignored
+by the host.
+
+DeviceUnavailable
+    No standard parameters.
+
+PayloadTooBig
+    Two bytes: max command payload capacity, MSB first.
+
+BadPayloadChecksum
+    No standard parameters.
+
+PortNotOpen
+    Three bytes: first is port type (0x00=admin, 0x01=user), second and third are
+port number, MSB first.
+
+IsBusy
+    No standard parameters.
+
+LowResources
+    No standard parameters.
+
+ImplementationFault
+    No standard parameters.
+
+UserCodeFault
+    No standard parameters.
+
+
+Implementation Parameters
+-------------------------
+
+At implOffset there is a two-byte bitfield implOptions that specifies which
+additional implementation error details are included. Each option, if
+selected, will append a fix number of bytes after implOptions as indicated.
+
+bit   option                bytes   value
+0     messageAsciiDef       4       2B offset from payload start, 2B length (NUL optional)       
+1     messageUtf8Def        4       2B offset from payload start, 2B length
+2     messageDispRec        0       if both message ascii and utf8 are included, should host 0: display both, or 1: display utf8 only?
+3-15  reserved, device must set to zero, host must ignore
+
+All values big-endian.
+
+
+getDeviceInfo2
+--------------
+
+device ident str        3
+device ascii            4
+device utf8             4
+device ascii/utf8 rec   0
+
+impl ident str 3B - 2B offset, 1B length (NUL optional)
+impl ascii     4B - 2B offset from payload start, 2B byte length (NUL optional)
+impl utf8      4B - 2B offset from payload start, 2B byte length
+impl ascii/utf8 rec     0 0B - if both ascii and utf8 provided 0: display both, 1:
+display utf8 only
+impl uuid           16B
+build version number 4B - X.Y.Z , XY 1B, Z 2B, 0xff/0xffff = ignore this field and remaining subs
+build timestamp 4B - uint32 unix timestamp
+build uuid  16B
+error ascii message 4B
+error utf8 message  4B
+error ascii/utf8 rec 0B - 0: show both, 1: show utf8 only
+always big-endian 
+
+identifier str limited to 30 chars: a-z, A-Z, 0-9, and _, cannot start with num
+
+PropCrow
+v0.1
+
+
+Error XXX
+---------------------            
+E4 |   implMajor   | 0xff: vers undefined; otherwise show "M.m" or "M"
+    E5 |   implMinor   | 0xff: show "M"; otherwise show "M.m" (if vers defined)
+    E6 | implTStamp_3  | optional unix timestamp (in uint32) to provide
+    E7 | implTStamp_2  |   date and time associated with the version (i.e.
+    E8 | implTStamp_1  |   that of code compilation or release)
+    E9 | implTStamp_0  |
+
+implMajor and implMinor provide a way of displaying the implementation's
+version in "M.m" format. If implMajor is 0xff both fields are to be ignored by
+the host (regardless of the value of implMinor). If implMinor is 0xff but
+implMajor is not, then the host should display a single integer version number
+(i.e. "M").
+
+
+
+
+
+Errors
+      
+
+In the case of implementation errors, the host discards everything at the first
+non-printable character and thereafter. NUL termination is not required.
+
+
+Extended Admin Commands (Admin Port 1)
+======================================
+
+The first byte of every Extended Admin command payload is a byte identifying
+the type of command. Whether there are additional payload bytes depends on the
+command. Key:
+
+    0x01 - echo([filler]) -> filler
+    0x02 - getExtraDeviceInfo() -> deviceInfo2 struct
+
+=================
+ 
+echo(filler)
+
+Command:
+    - address: specific or broadcast
+    - muted responses: optional (if not broadcast)
+    - type: admin
+    - port: 1
+    - payload: 0x00 + filler
+
+Response, if not muted:
+    - final: yes (no intermediate responses)
+    - payload: 0x00 + filler
+

@@ -1,0 +1,99 @@
+
+
+Reportable Errors
+-----------------
+
+Crow devices may encounter two kinds of errors: reportable and non-reportable.
+
+todo
+
+The device has several options for reporting errors:
+    - Don't send error responses. Devices are never required to send
+      error responses. Devices may choose to send error responses for
+      some conditions but not others. If a device does not send an error
+      response the transaction will eventually time-out.
+    - Send minimal error respones. A minimal error response consists of
+      a single byte with the error type and no other details.
+    - Send error responses with details. The device may send as many or
+      as few details as it chooses.
+
+
+Error Response Types
+--------------------
+
+Reportable error conditions are identified by a 5-bit type number. Crow
+version 2 assigns the following error types:
+
+    Type    Label                   Notes
+    0       UnspecifiedError        default when an error response has no payload
+    1       DeviceUnavailable       sleeping, etc.
+    2       DeviceIsBusy            e.g. still processing previous command
+    3       CommandTooLarge         command payload exceeds device capacity (expected, fixed limit)
+    4       CorruptPayload          only for checksum errors in body, not header
+    5       PortNotOpen           
+    6       LowResources            for memory/thread issues (e.g. unexpected command over limit), may be raised by service code
+    7       UnknownProtocol 	    raised by service code when it does not recognize a command’s format
+    8       RequestTooLarge         raised by service code when the required response would exceed the device's capacity 
+    9       ImplementationFault     unexpected error in device's Crow implementation code
+    10      ServiceFault            unexpected error in service code
+    11-31   UnknownError            reserved for future assignment
+
+
+UnknownCommand
+--------------
+
+Suppose a service receives a command that it does not understand at all. Perhaps the command was sent to the wrong address or port. What should it do? Here are some options:
+
+- Send a normal response. This is a bad idea. Since the device’s code did not
+  understand the command format, it is unlikely the host’s client code will
+  understand the response format. In fact, this could be hazardous depending
+  on how defensively the host’s client code is written.
+
+- Send no response. Eventually the transaction will time out and the host’s
+  client code will be notified of an error condition. However, the host won’t know why the transaction failed (it might conclude the device is disconnected), and the communications channel will be unusable while the transaction remains open.
+
+- Request the device implementation to send a Crow-level UnknownCommand error response. This is the best option. The transaction is quickly terminated and the host will receive a useful error message. The host can then use the standard admin commands (if available) to query which ports are open and what services are using them.
+
+
+Error Response Format
+---------------------
+
+The error response may have an empty payload, in which case the host should
+use UnspecifiedError to report the error to client code.
+
+If a payload is included, the first byte E0 indicates the error type:
+
+         |7|6|5|4|3|2|1|0|
+    -----|---------------|
+    (E0) |0|0|0|  type   |
+    (E1) |  inclDetails  |
+
+Bits 5-7 of E0 are reserved. Devices must set them to zero, and hosts must ignore
+them.
+
+The second, also optional, payload byte E1 is a bitfield that indicates what
+additional details are included. Every bit set in inclDetails implies that
+a given number of bytes will follow, in the order of the bits. These are
+the detail options:
+
+    Bit     Detail              Bytes   Notes
+    0       crowVersion         1
+    1       address             1           
+    2       port                1
+    3       maxCommandSize      2   
+    4       maxResponseSize     2
+    5       asciiMessage        4       2B offset (from payload start), 2B length (NUL optional)
+    6-7     -reserved-
+
+All multi-byte values are in big-endian order.
+
+The asciiMessage itself is included somewhere in the payload after all the details
+fields -- the offset indicates where. The string must consist of printable
+7-bit ascii characters only, and may be NUL-terminated. The host
+implementation must be prepared for improperly defined strings (e.g.
+non-printable characters, byte values greater than 127, or an offset or length
+that exceeds the payload size).
+
+
+    
+    

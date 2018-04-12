@@ -1,0 +1,104 @@
+
+
+ping command consists of an empty command payload, and its response is also empty
+all other commands and responses must have at least three payload bytes
+
+initial command header
+0x43, 0x41, type (one-byte)
+additional bytes depend on command
+
+initial response header
+0x43, 0x41, status (one-byte)
+status = 0 implies normal response to command
+non-zero status indicates an error response
+additional bytes depend on whether it is a normal or error response
+
+
+types
+-----
+- - ping
+0 - echo/hostPresence
+1 - getDeviceInfo
+2 - getOpenPorts
+
+
+status
+------
+0 - OK
+1 - CommandNotAvailable
+2 - MissingParameters
+
+
+
+getDeviceInfo()
+---------------
+
+The response has a minimum of 9 bytes:
+
+        pos     length  field/value
+        0       2       identifying bytes 0x43, 0x41
+        2       1       status = 0 (OK)
+        3       1       implementation's crow version, will be 0x02 or greater
+        4       2       implementation's max supported command payload size
+        6       2       implementation's max supported response payload size
+        8       1       additionalFields
+        9+     varies
+
+Other bytes will follow the ninth byte depending on which bits of additionalFields are set. Each
+bit corresponds to an optional field. If that field is included a fixed number
+of argument bytes will follow. 
+
+additionalFields:
+
+        bit     meaning                 arg bytes       value(s)
+        0       impl ascii desc         3               2B offset, 1B length
+        1       device ident str        3               2B offset, 1B length
+        2       device ascii desc       3               2B offset, 1B length
+        3+      reserved, must be 0
+
+offset from first byte of payload
+ident str follows identifier rules (a-z, A-Z, 0-9, _, no leading number) and must be 28 or fewer chars (not including optional NUL)
+ascii strings should be 7-bit printable chars only, final NUL optional
+
+all multi-byte values are big-endian
+
+
+
+getOpenPorts()
+--------------
+
+The response has at least four bytes:
+
+        pos     length  field/value
+        0       2       identifying bytes 0x43, 0x41
+        2       1       status = 0 (OK)
+        3       1       0x00 (reserved)
+       (4+      N       a list of each open port number)
+
+The list does not need to be sorted, but there should be no redundancies.
+
+(The reserved byte exists to allow the possibility of returning the open ports as a 32-byte bitfield
+in future versions.)
+
+
+getPortInfo(port)
+-----------------
+
+The command has four bytes -- the fourth is the number of port to obtain information about.
+
+Response:
+
+        pos     length  field/value
+        0       2       identifying bytes 0x43, 0x41
+        2       1       status = 0 (OK)
+        3       1       details
+       (4+      -       -)
+
+details:
+        bit     meaning                 arg bytes       values(s)
+        0       isOpen                  0               0 - closed, 1 - is open
+        1       protocolIdentStr        3               2B offset, 1B length
+        2+      reserved, must be 0
+
+
+
