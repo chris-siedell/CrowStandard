@@ -1,104 +1,125 @@
 
 
-ping command consists of an empty command payload, and its response is also empty
-all other commands and responses must have at least three payload bytes
+The ping command consists of an empty command payload, and its response is also empty.
 
-initial command header
-0x43, 0x41, type (one-byte)
-additional bytes depend on command
+All other commands and responses must have at least three payload bytes, which constitute
+the initial header.
 
-initial response header
-0x43, 0x41, status (one-byte)
-status = 0 implies normal response to command
-non-zero status indicates an error response
-additional bytes depend on whether it is a normal or error response
+The first two bytes are protocol identifying bytes that are always the
+same: 0x43 and 0x41 (ascii "CA", for Crow admin).
 
+The third byte is the command code, which specifies the command. Responses repeat
+the command code. The command codes:
+    na      ping
+    0       echo/hostPresence
+    1       getDeviceInfo
+    2       getOpenPorts
+    3       getPortInfo
+    4-255   reserved
 
-types
------
-- - ping
-0 - echo/hostPresence
-1 - getDeviceInfo
-2 - getOpenPorts
+Error conditions are reported using Crow error responses.
 
 
-status
-------
-0 - OK
-1 - CommandNotAvailable
-2 - MissingParameters
+echo(data), hostPresence(data)
+------------------------------
 
+echo is an enhanced form of ping that can be useful for diagnostic purposes.
+
+echo and hostPresence are the same command, except hostPresence does not expect
+a response. This means hostPresence can be broadcast. One use of hostPresence is to
+keep devices aware of when a host is connected.
+
+echo and hostPresence can also be used to allow a device using baud detection to
+recalibrate its timings. In this case data can be set to values optimal for that
+purpose (e.g. 0x55). Otherwise, the data has no meaning and is to be ignored by
+the device.
+
+Command format, 3+ bytes:
+        pos     len     field
+        0       3       initial header (0x43, 0x41, 0x00)
+       (3+      -       data)
+
+Response format, 3+ bytes:
+        identical to command
 
 
 getDeviceInfo()
 ---------------
 
-The response has a minimum of 9 bytes:
+Command, 3 bytes: 0x43, 0x41, 0x01.
 
+The response has a minimum of 8 bytes:
         pos     length  field/value
-        0       2       identifying bytes 0x43, 0x41
-        2       1       status = 0 (OK)
-        3       1       implementation's crow version, will be 0x02 or greater
-        4       2       implementation's max supported command payload size
-        6       2       implementation's max supported response payload size
-        8       1       additionalFields
-        9+     varies
+        0       3       initial header
+        3       1       crowVersion, will be 2 or greater
+        4       2       maxCommandSize, informational only, will be 2047 or less
+        6       2       maxResponseSize, informational only, will be 2047 or less
+       (8       1       additionalFields)
+       (9+     varies)
 
-Other bytes will follow the ninth byte depending on which bits of additionalFields are set. Each
-bit corresponds to an optional field. If that field is included a fixed number
-of argument bytes will follow. 
+The optional ninth byte -- additionalFields -- is a bit field that indicates if
+optional details are included. Other bytes will follow additionalFields depending on
+which bits are set. Each bit corresponds to an optional field. If that field is
+included a fixed number of argument bytes will follow. 
 
 additionalFields:
-
         bit     meaning                 arg bytes       value(s)
-        0       impl ascii desc         3               2B offset, 1B length
-        1       device ident str        3               2B offset, 1B length
-        2       device ascii desc       3               2B offset, 1B length
-        3+      reserved, must be 0
+        0       implIdentifier          3               2B offset, 1B length
+        1       implAsciiDesc           3               2B offset, 1B length
+        2       deviceIdentifier        3               2B offset, 1B length
+        3       deviceAsciiDesc         3               2B offset, 1B length
+        4+      reserved, device must set to 0, host must ignore
 
-offset from first byte of payload
-ident str follows identifier rules (a-z, A-Z, 0-9, _, no leading number) and must be 28 or fewer chars (not including optional NUL)
-ascii strings should be 7-bit printable chars only, final NUL optional
+Offsets are from start of response payload.
 
-all multi-byte values are big-endian
+Identifier strings follow standard rules -- only the ascii chars [a-z, A-Z, 0-9, _] with no
+leading number -- and must be 28 or fewer chars (not including optional terminating NUL).
 
+ascii strings should be 7-bit printable chars only. A terminating NUL is optional.
+
+All multi-byte values are big-endian.
 
 
 getOpenPorts()
 --------------
 
-The response has at least four bytes:
+Command, 3 bytes: 0x43, 0x41, 0x02.
 
+The response has 4+ bytes:
         pos     length  field/value
-        0       2       identifying bytes 0x43, 0x41
-        2       1       status = 0 (OK)
-        3       1       0x00 (reserved)
-       (4+      N       a list of each open port number)
+        0       3       initial header
+        3       1       listFormat
+       (4+      -       list of open ports / ports bitmasks) 
 
-The list does not need to be sorted, but there should be no redundancies.
+If listFormat is 0x00 then a list of all open ports should follow (one byte per
+port). The list does not need to be sorted, but there should be no redundancies.
 
-(The reserved byte exists to allow the possibility of returning the open ports as a 32-byte bitfield
-in future versions.)
+If listFormat is 0x01 then exactly 32 bytes should follow (for a total response size
+of 36 bytes). Each bit of the following bytes corresponds to a port, where 0 indicates
+the port is closed and 1 indicates that it is open. A formula for determining if a
+specific port is open is: 
+    isOpen(port) = bool( response[4 + port//8] & (1 << port%8) )
+
+Any other value for listFormat should cause the response to be rejected by the
+host as having an invalid/unknown format.
 
 
 getPortInfo(port)
 -----------------
 
-The command has four bytes -- the fourth is the number of port to obtain information about.
+Command, 4 bytes: 0x43, 0x41, 0x03, port.
 
-Response:
-
+Response, 4+ bytes:
         pos     length  field/value
-        0       2       identifying bytes 0x43, 0x41
-        2       1       status = 0 (OK)
+        0       3       initial header
         3       1       details
        (4+      -       -)
 
 details:
         bit     meaning                 arg bytes       values(s)
         0       isOpen                  0               0 - closed, 1 - is open
-        1       protocolIdentStr        3               2B offset, 1B length
-        2+      reserved, must be 0
-
+        1       serviceIdentifier       3               2B offset, 1B length
+        2       serviceAsciiDesc        3               2B offset, 1B length
+        3-7     reserved, must be set 0 by device, ignored by host
 
 

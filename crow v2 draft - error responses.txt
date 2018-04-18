@@ -18,25 +18,59 @@ The device has several options for reporting errors:
       as few details as it chooses.
 
 
-Error Response Types
---------------------
+Error Types
+-----------
 
-Reportable error conditions are identified by a 5-bit type number. Crow
-version 2 assigns the following error types:
+The Crow standard defines a heirarchy of errors, with CrowError at the top:
 
-    Type    Label                   Notes
-    0       UnspecifiedError        default when an error response has no payload
-    1       DeviceUnavailable       sleeping, etc.
-    2       DeviceIsBusy            e.g. still processing previous command
-    3       CommandTooLarge         command payload exceeds device capacity (expected, fixed limit)
-    4       CorruptPayload          only for checksum errors in body, not header
-    5       PortNotOpen           
-    6       LowResources            for memory/thread issues (e.g. unexpected command over limit), may be raised by service code
-    7       UnknownProtocol 	    raised by service code when it does not recognize a command’s format
-    8       RequestTooLarge         raised by service code when the required response would exceed the device's capacity 
-    9       ImplementationFault     unexpected error in device's Crow implementation code
-    10      ServiceFault            unexpected error in service code
-    11-31   UnknownError            reserved for future assignment
+CrowError (abstract) -> LocalError (abstract), RemoteError (abstract)
+LocalError -> HostError, ClientError
+RemoteError -> DeviceError, ServiceError
+
+The error types above indicate at what level the error was detected, not
+necessarily where the problem occurred or originated. For example,
+OversizedCommand is a DeviceError since it is detected at the device, but the
+error occurred because the client sent a command payload that was too large
+for the device to handle.
+
+RemoteError has a 'number' property (an unsigned, one-byte integer). This
+number is returned by the device in an error response. Some error numbers have
+meanings assigned by the Crow standard, while others may have meanings
+assigned by the device or service implementations. The number ranges:
+    0-31    - DeviceError   - meanings assigned by Crow standard
+    32-63   - DeviceError   - custom, device implementation defined errors
+    64-127  - ServiceError  - meanings assigned by Crow standard
+    128-255 - ServiceError  - custom, service defined errors
+
+DeviceError
+    Number  Type                        Notes
+    0       UnspecifiedDeviceError      default when an error response has no payload
+    1       DeviceFault                 generic, unexpected error in device's Crow implementation code
+    2       ServiceFault                generic, unexpected error in service code (caught by device implementation)
+    3       DeviceUnavailable           sleeping, etc.
+    4       DeviceIsBusy                e.g. still processing previous command
+    5       OversizedCommand            command payload exceeds device capacity (the expected, fixed limit)
+    6       CorruptCommandPayload       only for checksum errors in body, not header
+    7       PortNotOpen           
+    8       DeviceLowResources          for memory/thread issues (e.g. unexpected command too large)
+    9-31    UnknownDeviceError          "Unknown device error number N.", reserved for future assignment
+    32-63   DeviceError                 "Device error number NN.", meaning assigned by device implementation
+
+ServiceError
+    Number  Type                        Notes
+    64      UnspecifiedServiceError     catch-all
+    65      UnknownCommandFormat        raised by service code when it does not recognize a command’s format
+    66      RequestTooLarge             the required response would exceed the device's capacity 
+    67      ServiceLowResources         unexpected
+    68      CommandNotAvailable
+    69      CommandNotImplemented
+    70      CommandNotAllowed
+    71      InvalidCommand              the command's format is recognized, but it is still invalid 
+    72      IncorrectCommandSize        the command payload does not have the expected size
+    73      MissingCommandData          the command payload is missing expected data
+    74      TooMuchCommandData          the command payload has more data than expected 
+    75-127  UnknownServiceError         "Unknown service error number NN.", reserved for future assignment
+    128-255 ServiceError                "Service error number NNN.", meaning assigned by service
 
 
 UnknownCommand
@@ -59,17 +93,14 @@ Error Response Format
 ---------------------
 
 The error response may have an empty payload, in which case the host should
-use UnspecifiedError to report the error to client code.
+use UnspecifiedDeviceError to report the error.
 
-If a payload is included, the first byte E0 indicates the error type:
+If a payload is included, the first byte E0 indicates the error number:
 
          |7|6|5|4|3|2|1|0|
     -----|---------------|
-    (E0) |0|0|0|  type   |
+    (E0) |    number     |
     (E1) |  inclDetails  |
-
-Bits 5-7 of E0 are reserved. Devices must set them to zero, and hosts must ignore
-them.
 
 The second, also optional, payload byte E1 is a bitfield that indicates what
 additional details are included. Every bit set in inclDetails implies that
@@ -77,23 +108,34 @@ a given number of bytes will follow, in the order of the bits. These are
 the detail options:
 
     Bit     Detail              Bytes   Notes
-    0       crowVersion         1
-    1       address             1           
-    2       port                1
-    3       maxCommandSize      2   
-    4       maxResponseSize     2
-    5       asciiMessage        4       2B offset (from payload start), 2B length (NUL optional)
-    6-7     -reserved-
+    0       messageAsciiStr     4       2B offset, 2B length
+    1       crowVersion         1
+    2       maxCommandSize      2 
+    3       maxResponseSize     2
+    4       address             1 
+    5       port                1
+    6       serviceIdentifier   3       2B offset, 1B length
+    7       reserved, device must set to 0, host must ignore
 
 All multi-byte values are in big-endian order.
 
-The asciiMessage itself is included somewhere in the payload after all the details
-fields -- the offset indicates where. The string must consist of printable
-7-bit ascii characters only, and may be NUL-terminated. The host
-implementation must be prepared for improperly defined strings (e.g.
-non-printable characters, byte values greater than 127, or an offset or length
-that exceeds the payload size).
+offsets are from the payload start. length may include an optional NUL byte.
 
+messageAsciiStr should consist of printable 7-bit ascii characters only, 
+excluding an optional terminating NUL.
+
+The host implementation must be prepared for improperly defined strings (e.g.
+non-printable characters, byte values greater than 127, or an offset or length
+that exceeds the payload buffer). How to react to such errors is up to the host
+implementation.
+
+Some of these details are meaningful only for certain error types -- it is
+up to the device and the host implementations to decide what details to return
+and what details to disclose to client code.
+
+Some details can also be obtained using the standard Crow admin commands. The
+option to include them in the error response exists since the Crow admin
+service may not be running.
 
     
     
