@@ -72,6 +72,14 @@ ServiceError
     75-127  UnknownServiceError         "Unknown service error number NN.", reserved for future assignment
     128-255 ServiceError                "Service error number NNN.", meaning assigned by service
 
+It is up to the host implementation to decide how to represent these errors.
+That is, whether to create a individual error class for each type using the
+suggested heirarchy, or to fold them into one or a few error classes, and then
+rely on a message or other property to give more specific details. Providing
+all of these error types is done for the benefit of the device and service
+implementations, allowing them to send as specific error information as
+possible using just one byte.
+
 
 UnknownCommand
 --------------
