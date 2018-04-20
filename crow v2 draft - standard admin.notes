@@ -48,21 +48,25 @@ getDeviceInfo()
 
 Command, 3 bytes: 0x43, 0x41, 0x01.
 
-The response has a minimum of 8 bytes:
+The response has a minimum of 9 bytes:
         pos     length  field/value
         0       3       initial header
         3       1       crowVersion, will be 2 or greater
-        4       2       maxCommandSize, informational only, will be 2047 or less
-        6       2       maxResponseSize, informational only, will be 2047 or less
-       (8       1       additionalFields)
-       (9+     varies)
+        4       1       crowAdminVersion
+        5       2       maxCommandSize, informational only, will be 2047 or less
+        7       2       maxResponseSize, informational only, will be 2047 or less
+       (9       1       details)
+       (10+     varies)
 
-The optional ninth byte -- additionalFields -- is a bit field that indicates if
-optional details are included. Other bytes will follow additionalFields depending on
+The first four items are mandatory details (crowVersion, crowAdminVersion,
+maxCommandSize, and maxResponseSize).
+
+The optional tenth byte -- details -- is a bit field that indicates if
+more details are included. Other bytes will follow details depending on
 which bits are set. Each bit corresponds to an optional field. If that field is
 included a fixed number of argument bytes will follow. 
 
-additionalFields:
+details:
         bit     meaning                 arg bytes       value(s)
         0       implIdentifier          3               2B offset, 1B length
         1       implAsciiDesc           3               2B offset, 1B length

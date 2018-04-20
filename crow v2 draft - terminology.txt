@@ -1,0 +1,14 @@
+
+
+A 'device' responds to commands. A 'device implementation' (also sometimes just 'device') is an implementation of the Crow transport layer running on a device.
+
+A 'service' runs on the device and registers a 'port' with the device implementation. When a command arrives on the given port the service will be invoked.
+
+
+
+
+
+port
+A port is a one-byte unsigned integer. Port 0 is reserved for the 'CrowAdmin' service, which is defined by the Crow standard. Port 1 is reserved for admin services specific to the device implementation. Ports 2-31 are reserved for future assignment.
+
+
