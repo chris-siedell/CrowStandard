@@ -1,7 +1,9 @@
+crow v2 draft - packet format.txt
+23 April 2018
 
 
 The Command Header
-==================
+------------------
 
 A command header is always 7 bytes and has the following format:
 
@@ -30,7 +32,7 @@ the reserved bits as shown.
 
 
 The Response Header
-===================
+-------------------
 
 A response header is always 5 bytes and has the following format:
 
@@ -52,17 +54,21 @@ The fields have the following definitions:
 The other bits are reserved and must have the values shown.
 
 
+Changes from v1
+---------------
 
-Changes from V1
-===============
+The version 2 packet format is not backwards compatible with version 1. Here
+are the differences:
 
-- The bits within CH0 and RH0 have been rearranged.
-- The bytes in the command header have been rearranged.
-- 'Protocol numbers' are now 'ports'.
-- The number of ports has been reduced (two-byte to one-byte values).
-- The implicit port option has been removed.
-- The user/admin command distinction has been removed.
-- The 'mute' field has been changed to 'responseExpected' with the values
-  inverted.
-- Intermediate responses have been removed.
+    - The bits within CH0 and RH0 have been rearranged.
+    - The bytes in the command header have been rearranged.
+    - 'Protocol numbers' are now 'ports'.
+    - The number of ports has been reduced (two-byte to one-byte values).
+    - The implicit port option has been removed.
+    - The user/admin command distinction has been removed.
+    - The 'mute' field has been changed to 'responseExpected' with the values
+      inverted.
+    - Intermediate responses have been removed.
+    - Error responses have been added.
+    
 

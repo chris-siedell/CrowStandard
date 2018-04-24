@@ -1,29 +1,64 @@
+crow v2 draft - error responses.txt
+23 April 2018
 
 
-Reportable Errors
------------------
+Error Responses
+---------------
 
-Crow devices may encounter two kinds of errors: reportable and non-reportable.
-
-todo
-
-The device has several options for reporting errors:
-    - Don't send error responses. Devices are never required to send
-      error responses. Devices may choose to send error responses for
-      some conditions but not others. If a device does not send an error
-      response the transaction will eventually time-out.
-    - Send minimal error respones. A minimal error response consists of
-      a single byte with the error type and no other details.
-    - Send error responses with details. The device may send as many or
-      as few details as it chooses.
+The device implementation and service code may send a special error response
+to report that an error has occurred. As with normal responses, sending an
+error response requires that there be an open transaction involving the
+device. So some errors are not reportable. For example, if an error occurs
+involving a broadcast command (where responseExpected is false) the device
+will have to silently discard the command.
 
 
-Error Types
------------
+Error Response Support
+----------------------
+
+Devices are not required to support error responses. If they do, they may
+report as many or as few error conditions as they want. Additionally, the
+error response format is quite flexible.  A device may send an empty error
+response, a one-byte error response, or multi-byte error response with a
+variety of optional details, including an error message composed on the
+device.
+
+If the device can not respond to a command due to an error, and it does not
+send an error response, then the transaction will eventually expire and the
+client will recieve a NoResponse error. The downside to not responding is that
+it locks up the communications channel until the transaction expires.
+
+If the device sends an empty error response it will be reported simply as a
+RemoteError (see below).
+
+A one-byte error response allows the device to be more specific as to the type
+of error -- see the Error Heirarchy section below.
+
+
+Error Responses from Service Code
+---------------------------------
+
+Crow allows service code to send error responses. However, the protocol used by
+the service code might define its own error response format, and the service
+code could then send back errors in normal Crow responses using this format.
+
+Using Crow-level error responses allows the service code to take advantage of
+the error reporting mechanisms already in place on the device and host. The
+drawbacks are that it makes the service code less portable, and using
+Crow-level error responses limits what information can be reported. 
+
+Even when using a protocol that defines its own error responses, services
+should still raise UnknownCommandFormat when they do not recognize the command
+format. This is the safest way for the service to let the client know that it
+may have sent the command to the wrong port or used the wrong protocol.
+
+
+Error Heirarchy
+---------------
 
 The Crow standard defines a heirarchy of errors, with CrowError at the top:
 
-CrowError (abstract) -> LocalError (abstract), RemoteError (abstract)
+CrowError -> LocalError, RemoteError
 LocalError -> HostError, ClientError
 RemoteError -> DeviceError, ServiceError
 
@@ -36,29 +71,30 @@ for the device to handle.
 RemoteError has a 'number' property (an unsigned, one-byte integer). This
 number is returned by the device in an error response. Some error numbers have
 meanings assigned by the Crow standard, while others may have meanings
-assigned by the device or service implementations. The number ranges:
-    0-31    - DeviceError   - meanings assigned by Crow standard
-    32-63   - DeviceError   - custom, device implementation defined errors
+assigned by the specific device implementation or service. The number ranges:
+    0       - RemoteError   - default for empty error responses
+    1-31    - DeviceError   - meanings assigned by Crow standard
+    32-63   - DeviceError   - custom meanings, assigned by device implementation
     64-127  - ServiceError  - meanings assigned by Crow standard
-    128-255 - ServiceError  - custom, service defined errors
+    128-255 - ServiceError  - custom meanings, assigned by service
 
 DeviceError
     Number  Type                        Notes
-    0       UnspecifiedDeviceError      default when an error response has no payload
-    1       DeviceFault                 generic, unexpected error in device's Crow implementation code
-    2       ServiceFault                generic, unexpected error in service code (caught by device implementation)
-    3       DeviceUnavailable           sleeping, etc.
-    4       DeviceIsBusy                e.g. still processing previous command
-    5       OversizedCommand            command payload exceeds device capacity (the expected, fixed limit)
-    6       CorruptCommandPayload       only for checksum errors in body, not header
-    7       PortNotOpen           
-    8       DeviceLowResources          for memory/thread issues (e.g. unexpected command too large)
-    9-31    UnknownDeviceError          "Unknown device error number N.", reserved for future assignment
+    1       DeviceError      
+    2       DeviceFault                 generic, unexpected error in device's Crow implementation code
+    3       ServiceFault                generic, unexpected error in service code (caught by device implementation)
+    4       DeviceUnavailable           sleeping, etc.
+    5       DeviceIsBusy                e.g. still processing previous command
+    6       OversizedCommand            command payload exceeds device capacity (the expected, fixed limit)
+    7       CorruptCommandPayload       only for checksum errors in body, not header
+    8       PortNotOpen           
+    9       DeviceLowResources          for memory/thread issues (e.g. unexpected command too large)
+    10-31   UnknownDeviceError          "Unknown device error number N.", reserved for future assignment
     32-63   DeviceError                 "Device error number NN.", meaning assigned by device implementation
 
 ServiceError
     Number  Type                        Notes
-    64      UnspecifiedServiceError     catch-all
+    64      ServiceError
     65      UnknownCommandFormat        raised by service code when it does not recognize a command’s format
     66      RequestTooLarge             the required response would exceed the device's capacity 
     67      ServiceLowResources         unexpected
@@ -77,57 +113,47 @@ That is, whether to create a individual error class for each type using the
 suggested heirarchy, or to fold them into one or a few error classes, and then
 rely on a message or other property to give more specific details. Providing
 all of these error types is done for the benefit of the device and service
-implementations, allowing them to send as specific error information as
-possible using just one byte.
-
-
-UnknownCommand
---------------
-
-Suppose a service receives a command that it does not understand at all. Perhaps the command was sent to the wrong address or port. What should it do? Here are some options:
-
-- Send a normal response. This is a bad idea. Since the device’s code did not
-  understand the command format, it is unlikely the host’s client code will
-  understand the response format. In fact, this could be hazardous depending
-  on how defensively the host’s client code is written.
-
-- Send no response. Eventually the transaction will time out and the host’s
-  client code will be notified of an error condition. However, the host won’t know why the transaction failed (it might conclude the device is disconnected), and the communications channel will be unusable while the transaction remains open.
-
-- Request the device implementation to send a Crow-level UnknownCommand error response. This is the best option. The transaction is quickly terminated and the host will receive a useful error message. The host can then use the standard admin commands (if available) to query which ports are open and what services are using them.
+implementations, allowing them to send specific error information using just
+one byte.
 
 
 Error Response Format
 ---------------------
 
+A Crow-level error response has an error flag raised in its header, as
+described in the Packet Format section. When this flag is set the host
+implementation parses the response payload according to the format described
+here.
+
 The error response may have an empty payload, in which case the host should
-use UnspecifiedDeviceError to report the error.
+use RemoteError to report the error.
 
 If a payload is included, the first byte E0 indicates the error number:
 
          |7|6|5|4|3|2|1|0|
     -----|---------------|
     (E0) |    number     |
-    (E1) |  inclDetails  |
+    (E1) |    details    |
 
 The second, also optional, payload byte E1 is a bitfield that indicates what
-additional details are included. Every bit set in inclDetails implies that
-a given number of bytes will follow, in the order of the bits. These are
-the detail options:
+additional details are included. Every bit set in details implies that
+a given number of fixed argument bytes will follow, in the order of the bits.
 
-    Bit     Detail              Bytes   Notes
-    0       messageAsciiStr     4       2B offset, 2B length
+These are the details options:
+    Bit     Detail              Arg Bytes   Notes
+    0       messageAsciiStr     4           2B offset, 2B length
     1       crowVersion         1
     2       maxCommandSize      2 
     3       maxResponseSize     2
     4       address             1 
     5       port                1
-    6       serviceIdentifier   3       2B offset, 1B length
+    6       serviceIdentifier   3           2B offset, 1B length
     7       reserved, device must set to 0, host must ignore
 
 All multi-byte values are in big-endian order.
 
-offsets are from the payload start. length may include an optional NUL byte.
+offsets are from the payload start. String and identifier lengths may include
+an optional terminating NUL byte.
 
 messageAsciiStr should consist of printable 7-bit ascii characters only, 
 excluding an optional terminating NUL.

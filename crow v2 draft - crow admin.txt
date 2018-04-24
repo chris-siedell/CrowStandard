@@ -1,9 +1,22 @@
+crow v2 draft - crow admin.txt
+23 April 2018
 
 
-The ping command consists of an empty command payload, and its response is also empty.
+The Crow Admin Service
+----------------------
 
-All other commands and responses must have at least three payload bytes, which constitute
-the initial header.
+The Crow standard defines a service that allows a host to discover and learn
+about a device using basic commands. This service uses the identifier 'CrowAdmin'
+and is expected to run on port 0 by default.
+
+The Crow admin service described here is version 1.
+
+
+Payload Format
+--------------
+
+All commands and responses (except for ping's) must have at least three
+payload bytes, which constitute the initial header.
 
 The first two bytes are protocol identifying bytes that are always the
 same: 0x43 and 0x41 (ascii "CA", for Crow admin).
@@ -17,7 +30,13 @@ the command code. The command codes:
     3       getPortInfo
     4-255   reserved
 
-Error conditions are reported using Crow error responses.
+Error conditions are reported using Crow-level error responses.
+
+
+ping()
+------
+
+The ping command consists of an empty command payload, and its response is also empty.
 
 
 echo(data), hostPresence(data)
@@ -31,11 +50,11 @@ keep devices aware of when a host is connected.
 
 echo and hostPresence can also be used to allow a device using baud detection to
 recalibrate its timings. In this case data can be set to values optimal for that
-purpose (e.g. 0x55). Otherwise, the data has no meaning and is to be ignored by
-the device.
+purpose (e.g. 0x55). Otherwise, the data has no meaning and is expected to be
+ignored by the device.
 
 Command format, 3+ bytes:
-        pos     len     field
+        Pos     Len     Field
         0       3       initial header (0x43, 0x41, 0x00)
        (3+      -       data)
 
@@ -49,12 +68,12 @@ getDeviceInfo()
 Command, 3 bytes: 0x43, 0x41, 0x01.
 
 The response has a minimum of 9 bytes:
-        pos     length  field/value
+        Pos     Len     Field
         0       3       initial header
         3       1       crowVersion, will be 2 or greater
-        4       1       crowAdminVersion
-        5       2       maxCommandSize, informational only, will be 2047 or less
-        7       2       maxResponseSize, informational only, will be 2047 or less
+        4       1       crowAdminVersion, currently 1
+        5       2       maxCommandSize, will be 2047 or less
+        7       2       maxResponseSize, will be 2047 or less
        (9       1       details)
        (10+     varies)
 
@@ -62,12 +81,11 @@ The first four items are mandatory details (crowVersion, crowAdminVersion,
 maxCommandSize, and maxResponseSize).
 
 The optional tenth byte -- details -- is a bit field that indicates if
-more details are included. Other bytes will follow details depending on
-which bits are set. Each bit corresponds to an optional field. If that field is
-included a fixed number of argument bytes will follow. 
+more details are included. Each bit corresponds to an optional field. If that 
+field is included a fixed number of argument bytes will follow. 
 
 details:
-        bit     meaning                 arg bytes       value(s)
+        Bit     Meaning                 Arg Bytes       Value(s)
         0       implIdentifier          3               2B offset, 1B length
         1       implAsciiDesc           3               2B offset, 1B length
         2       deviceIdentifier        3               2B offset, 1B length
@@ -77,7 +95,7 @@ details:
 Offsets are from start of response payload.
 
 Identifier strings follow standard rules -- only the ascii chars [a-z, A-Z, 0-9, _] with no
-leading number -- and must be 28 or fewer chars (not including optional terminating NUL).
+leading number -- and should be short. A terminating NUL is optional.
 
 ascii strings should be 7-bit printable chars only. A terminating NUL is optional.
 
@@ -90,7 +108,7 @@ getOpenPorts()
 Command, 3 bytes: 0x43, 0x41, 0x02.
 
 The response has 4+ bytes:
-        pos     length  field/value
+        Pos     Len     Field
         0       3       initial header
         3       1       listFormat
        (4+      -       list of open ports / ports bitmasks) 
@@ -114,16 +132,19 @@ getPortInfo(port)
 Command, 4 bytes: 0x43, 0x41, 0x03, port.
 
 Response, 4+ bytes:
-        pos     length  field/value
+        Pos     Len     Field
         0       3       initial header
         3       1       details
        (4+      -       -)
 
+As with getDeviceInfo, the details byte indicates what additional details are
+included in the response.
+
 details:
-        bit     meaning                 arg bytes       values(s)
+        Bit     Meaning                 Arg Bytes       Value(s)
         0       isOpen                  0               0 - closed, 1 - is open
         1       serviceIdentifier       3               2B offset, 1B length
         2       serviceAsciiDesc        3               2B offset, 1B length
-        3-7     reserved, must be set 0 by device, ignored by host
+        3-7     reserved, device must set to 0, host must ignore
 
 
