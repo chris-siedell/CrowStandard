@@ -9,7 +9,7 @@ The Crow standard defines a service that allows a host to discover and learn
 about a device using basic commands. This service uses the identifier 'CrowAdmin'
 and is expected to run on port 0 by default.
 
-The Crow admin service described here is version 1.
+The Crow admin service described here is version 2.
 
 
 Payload Format
@@ -71,7 +71,7 @@ The response has a minimum of 9 bytes:
         Pos     Len     Field
         0       3       initial header
         3       1       crowVersion, will be 2 or greater
-        4       1       crowAdminVersion, currently 1
+        4       1       crowAdminVersion, currently 2
         5       2       maxCommandSize, will be 2047 or less
         7       2       maxResponseSize, will be 2047 or less
        (9       1       details)
