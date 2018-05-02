@@ -79,34 +79,38 @@ assigned by the specific device implementation or service. The number ranges:
     128-255 - ServiceError  - custom meanings, assigned by service
 
 DeviceError
-    Number  Type                        Notes
-    1       DeviceError      
-    2       DeviceFault                 generic, unexpected error in device's Crow implementation code
-    3       ServiceFault                generic, unexpected error in service code (caught by device implementation)
-    4       DeviceUnavailable           sleeping, etc.
-    5       DeviceIsBusy                e.g. still processing previous command
-    6       OversizedCommand            command payload exceeds device capacity (the expected, fixed limit)
-    7       CorruptCommandPayload       only for checksum errors in body, not header
-    8       PortNotOpen           
-    9       DeviceLowResources          for memory/thread issues (e.g. unexpected command too large)
-    10-31   UnknownDeviceError          "Unknown device error number N.", reserved for future assignment
-    32-63   DeviceError                 "Device error number NN.", meaning assigned by device implementation
+    Number  Type                        Parent                  Notes
+    1       DeviceError                 RemoteError
+    2       DeviceFault                 DeviceError             generic, unexpected error in device's Crow implementation code
+    3       ServiceFault                DeviceError             generic, unexpected error in service code (caught by device implementation)
+    4       DeviceUnavailable           DeviceError             sleeping, etc.
+    5       DeviceIsBusy                DeviceUnavailable       e.g. still processing previous command
+    6       OversizedCommand            DeviceError             command payload exceeds device capacity (the expected, fixed limit)
+    7       CorruptCommandPayload       DeviceError             only for checksum errors in body, not header
+    8       PortNotOpen                 DeviceError     
+    9       DeviceLowResources          DeviceError             for memory/thread issues (e.g. unexpected command too large)
+    10-31   UnknownDeviceError          DeviceError             "Unknown device error number N.", reserved for future assignment
+    32-63   *DeviceError                *RemoteError            "Device error number NN.", meaning may be assigned by device implementation
+
+(*) Default if not overridden by host/device implementations.
 
 ServiceError
-    Number  Type                        Notes
-    64      ServiceError
-    65      UnknownCommandFormat        raised by service code when it does not recognize a command’s format
-    66      RequestTooLarge             the required response would exceed the device's capacity 
-    67      ServiceLowResources         unexpected
-    68      CommandNotAvailable
-    69      CommandNotImplemented
-    70      CommandNotAllowed
-    71      InvalidCommand              the command's format is recognized, but it is still invalid 
-    72      IncorrectCommandSize        the command payload does not have the expected size
-    73      MissingCommandData          the command payload is missing expected data
-    74      TooMuchCommandData          the command payload has more data than expected 
-    75-127  UnknownServiceError         "Unknown service error number NN.", reserved for future assignment
-    128-255 ServiceError                "Service error number NNN.", meaning assigned by service
+    Number  Type                        Parent                  Notes
+    64      ServiceError                RemoteError
+    65      UnknownCommandFormat        ServiceError            raised by service code when it does not recognize a command’s format
+    66      ServiceLowResources         ServiceError            unexpected
+    67      InvalidCommand              ServiceError            the command's format is recognized, but it can not be performed 
+    68      RequestTooLarge             InvalidCommand          the required response would exceed the device's capacity 
+    69      CommandNotAvailable         InvalidCommand
+    70      CommandNotImplemented       CommandNotAvailable
+    71      CommandNotAllowed           CommandNotAvailable 
+    72      IncorrectCommandSize        InvalidCommand          the command payload does not have the expected size
+    73      MissingCommandData          IncorrectCommandSize    the command payload is missing expected data
+    74      TooMuchCommandData          IncorrectCommandSize    the command payload has more data than expected
+    75-127  UnknownServiceError         ServiceError            "Unknown service error number NN.", reserved for future assignment
+    128-255 *ServiceError               *RemoteError            "Service error number NNN.", meaning may be  assigned by service
+
+(*) Default if not overridden by client/service implementations.
 
 It is up to the host implementation to decide how to represent these errors.
 That is, whether to create a individual error class for each type using the
